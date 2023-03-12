@@ -9,12 +9,13 @@ using System.Reflection;
 public class TodoListWindow : EditorWindow
 {
     private readonly int Capacity = 32;
-
+    
     private static Dictionary<string, List<(string targetName, string message, int order)>> todoDict =
-        new Dictionary<string, List<(string targetName, string message, int order)>>();
+        new Dictionary<string, List<(string targetName, string message, int order)>>(32);
+    private Dictionary<string,List<Vector2>> elementScrollPositions = new Dictionary<string,List<Vector2>>(32);
 
-    private static Dictionary<string, bool> showDetails = new Dictionary<string, bool>();
-    private static string[] colors = new []{ "red", "orange", "yellow", "green", "blue", "indigo", "violet", "purple" };
+    private static Dictionary<string, bool> showDetails = new Dictionary<string, bool>(32);
+    private static string[] colors = new []{ "red", "orange", "yellow", "green", "cyan", "indigo", "violet", "purple" };
     private Vector2 scrollPosition;
 
     [MenuItem("Window/Todo List")]
@@ -47,13 +48,18 @@ public class TodoListWindow : EditorWindow
                 fontStyle = FontStyle.Bold,
             });
         // list info
-        EditorGUILayout.LabelField($"( total : <color=yellow>{todoDict.Sum(i => i.Value.Count)}</color> )",
+        EditorGUILayout.LabelField($"( total : <color=yellow>{(todoDict is null ? 0 : todoDict.Sum(i => i.Value.Count))}</color> )",
             new GUIStyle(GUI.skin.box)
             {
                 fontSize = 14,
                 richText = true
             });
         EditorGUILayout.EndVertical();
+        if(todoDict is null || todoDict.Count == 0)
+        {
+            EditorGUILayout.EndScrollView();
+            return;
+        }
         EditorGUILayout.BeginVertical(new GUIStyle(EditorStyles.textArea){stretchWidth = true,stretchHeight = true, alignment = TextAnchor.MiddleCenter});
         int index = 0;
         foreach (var kvp in todoDict)
@@ -89,14 +95,14 @@ public class TodoListWindow : EditorWindow
 
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.Space(15);
+            
             index++;
-
             if (!show) continue;
             EditorGUI.indentLevel += 2;
             (string targetName, string message, int order)[] orderedArray = kvp.Value.OrderBy(x => x.order).ToArray();
             for (int i = 0; i < orderedArray.Length; i++)
             {
-                Rect rect = EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.BeginHorizontal();
                 (string targetName, string message, int order) todo = orderedArray[i];
                 string color = "green";
                 if (i < 3) color = "red";
@@ -109,13 +115,15 @@ public class TodoListWindow : EditorWindow
                 if (todo.message.Length < 30) continue;
                     
                 EditorGUILayout.Space(5);
-                EditorGUILayout.SelectableLabel(todo.message.Replace('◀', '▲'),
+                elementScrollPositions[kvp.Key][i] = EditorGUILayout.BeginScrollView(elementScrollPositions[kvp.Key][i], GUILayout.Height(200f), GUILayout.ExpandWidth(true));
+                todo.message = EditorGUILayout.TextArea(todo.message.Replace('◀', '▲'),
                     new GUIStyle(GUI.skin.textArea)
                     {
                         richText = true,
                         stretchWidth = true,
-                        stretchHeight = true
+                        stretchHeight = true,
                     });
+                EditorGUILayout.EndScrollView();
                 EditorGUILayout.Space(10);
             }
             EditorGUILayout.Space(15);
@@ -132,11 +140,15 @@ public class TodoListWindow : EditorWindow
     {
         todoDict.Clear();
         showDetails.Clear();
+        elementScrollPositions.Clear();
 
         List<MonoScript> monoScripts = AssetDatabase.FindAssets("t:MonoScript")
             .Select(AssetDatabase.GUIDToAssetPath)
             .Select(AssetDatabase.LoadAssetAtPath<MonoScript>)
             .ToList();
+
+        if (monoScripts.Count == 0)
+            return;
 
         foreach (MonoScript monoScript in monoScripts)
         {
@@ -156,6 +168,7 @@ public class TodoListWindow : EditorWindow
                 {
                     todoDict.Add(key, new List<(string, string, int)>(Capacity));
                     showDetails.Add(key, false);
+                    elementScrollPositions.Add(key,new List<Vector2>(32));
                 }
                     
                 foreach (ToDoAttribute attribute in noMemberAttributes)
@@ -168,6 +181,7 @@ public class TodoListWindow : EditorWindow
                     if (todoDict[key].Contains(todo))
                         todoDict[key].Remove(todo);
                     todoDict[key].Add(todo);
+                    elementScrollPositions[key].Add(new Vector2());
                 }   
             }
             
@@ -185,6 +199,7 @@ public class TodoListWindow : EditorWindow
                 {
                     todoDict.Add(key, new List<(string, string, int)>(Capacity));
                     showDetails.Add(key, false);
+                    elementScrollPositions.Add(key,new List<Vector2>(32));
                 }
                 foreach (ToDoAttribute attribute in attributes)
                 {
@@ -196,6 +211,7 @@ public class TodoListWindow : EditorWindow
                     if (todoDict[key].Contains(todo))
                         todoDict[key].Remove(todo);
                     todoDict[key].Add(todo);
+                    elementScrollPositions[key].Add(new Vector2());
                 }
             }
         }
